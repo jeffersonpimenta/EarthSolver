@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "earthsolver"
+version = "0.1.0"
+description = "Suite de analise de aterramento (estratificacao de solo e malha pelo IEEE Std 80)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "GPL-3.0-or-later" }
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+earthsolver = "earthsolver.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["earthsolver"]
