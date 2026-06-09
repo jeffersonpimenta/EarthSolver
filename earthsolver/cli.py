@@ -13,6 +13,7 @@ import sys
 
 from .estratificacao import Estratificador
 from .malha import EstudoAterramento, Malha
+from .numerico import Condutor, Eletrodo, EstudoNumerico
 from .solo import ModeloSolo
 
 
@@ -76,6 +77,32 @@ def _malha(args):
     estudo.imprimir_resultado()
     if args.exportar:
         estudo.exportar(args.exportar)
+    return estudo
+
+
+def _carregar_eletrodo(caminho):
+    """Le a geometria do eletrodo. Aceita {'condutores':[...]} ou {'malha_retangular':{...}}."""
+    with open(caminho) as f:
+        d = json.load(f)
+    if "malha_retangular" in d:
+        return Eletrodo.malha_retangular(**d["malha_retangular"])
+    if "condutores" in d:
+        return Eletrodo([Condutor(c["p1"], c["p2"], c["raio"])
+                         for c in d["condutores"]])
+    raise ValueError("eletrodo deve conter 'condutores' ou 'malha_retangular'")
+
+
+def _numerico(args):
+    solo = _carregar_solo(args.solo)
+    eletrodo = _carregar_eletrodo(args.eletrodo)
+    estudo = EstudoNumerico(solo, eletrodo, Ig=args.ig, t=args.t, peso=args.peso,
+                            comp_alvo=args.comp_alvo, rho_s=args.rho_s, h_s=args.h_s)
+    estudo.resolver()
+    estudo.imprimir_resultado()
+    if args.exportar:
+        estudo.exportar(args.exportar)
+    if args.raster:
+        estudo.exportar_raster(args.raster)
     return estudo
 
 
@@ -145,6 +172,24 @@ def main(argv=None):
     p_a.add_argument("projeto", help="arquivo de projeto JSON")
     p_a.add_argument("--exportar", help="arquivo JSON de saida")
     p_a.set_defaults(func=_analisar)
+
+    p_n = sub.add_parser("numerico",
+                         help="solver numerico de segmentacao (geometria explicita)")
+    p_n.add_argument("--eletrodo", required=True,
+                     help="JSON: {condutores:[...]} ou {malha_retangular:{...}}")
+    p_n.add_argument("--solo", required=True, help="JSON do modelo de solo")
+    p_n.add_argument("--ig", type=float, required=True, help="corrente de malha (A)")
+    p_n.add_argument("--t", type=float, required=True, help="duracao da falta (s)")
+    p_n.add_argument("--peso", type=int, default=70, help="peso corporeo 50 ou 70")
+    p_n.add_argument("--comp-alvo", type=float, default=2.0, dest="comp_alvo",
+                     help="comprimento alvo de segmento (m)")
+    p_n.add_argument("--rho-s", type=float, default=None, dest="rho_s",
+                     help="resistividade da camada superficial (brita), Ohm.m")
+    p_n.add_argument("--h-s", type=float, default=0.1, dest="h_s",
+                     help="espessura da camada superficial (m)")
+    p_n.add_argument("--exportar", help="arquivo JSON de saida do resultado")
+    p_n.add_argument("--raster", help="arquivo JSON do mapa de potencial de superficie")
+    p_n.set_defaults(func=_numerico)
 
     args = parser.parse_args(argv)
     try:

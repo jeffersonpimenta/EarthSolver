@@ -8,7 +8,11 @@ tensoes de toque e de passo), no estilo do projeto EletroSolver.
 from .solo import ModeloSolo
 from .estratificacao import Estratificador
 from .malha import Malha, EstudoAterramento
+from .numerico import Condutor, Eletrodo, EstudoNumerico
 
-__all__ = ["ModeloSolo", "Estratificador", "Malha", "EstudoAterramento"]
+__all__ = [
+    "ModeloSolo", "Estratificador", "Malha", "EstudoAterramento",
+    "Condutor", "Eletrodo", "EstudoNumerico",
+]
 
 __version__ = "0.1.0"

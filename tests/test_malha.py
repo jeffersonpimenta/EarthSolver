@@ -99,5 +99,5 @@ def test_validacoes_malha_e_estudo():
         EstudoAterramento(solo, _malha_exemplo(), Ig=0, t=0.5)
     with pytest.raises(ValueError):
         EstudoAterramento(solo, _malha_exemplo(), Ig=100, t=0.5, peso=60)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="EstudoNumerico"):
         EstudoAterramento(solo, _malha_exemplo(), Ig=100, t=0.5, metodo="numerico")

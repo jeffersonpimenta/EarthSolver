@@ -10,6 +10,8 @@ import json
 import math
 from dataclasses import dataclass
 
+from .seguranca import C_PESO, fator_cs
+from .seguranca import tensoes_toleraveis as _tensoes_toleraveis
 from .solo import ModeloSolo
 
 # Profundidade de referencia para o fator Kh (IEEE 80), em metros.
@@ -91,7 +93,7 @@ class EstudoAterramento:
       metodo: "ieee80" (atual). Reservado para "numerico" no futuro.
     """
 
-    _C_PESO = {50: 0.116, 70: 0.157}
+    _C_PESO = C_PESO
 
     def __init__(self, modelo_solo, malha, Ig, t, peso=70, metodo="ieee80"):
         if not isinstance(modelo_solo, ModeloSolo):
@@ -104,8 +106,14 @@ class EstudoAterramento:
             raise ValueError("t deve ser > 0")
         if peso not in self._C_PESO:
             raise ValueError("peso deve ser 50 ou 70 (kg)")
+        if metodo == "numerico":
+            raise ValueError(
+                "o metodo 'numerico' (segmentacao de condutores) usa a classe "
+                "EstudoNumerico, que recebe geometria explicita de condutores "
+                "(earthsolver.numerico), nao a Malha agregada do IEEE 80"
+            )
         if metodo != "ieee80":
-            raise ValueError(f"metodo {metodo!r} ainda nao implementado")
+            raise ValueError(f"metodo {metodo!r} desconhecido (use 'ieee80')")
 
         self.modelo_solo = modelo_solo
         self.malha = malha
@@ -181,15 +189,12 @@ class EstudoAterramento:
     # ----------------------------------------------------------- seguranca
     def _Cs(self) -> float:
         """Fator de reducao da camada superficial (IEEE 80)."""
-        return 1.0 - 0.09 * (1.0 - self.rho / self.rho_s) / (2.0 * self.malha.h_s + 0.09)
+        return fator_cs(self.rho, self.rho_s, self.malha.h_s)
 
     def tensoes_toleraveis(self):
         """Tensoes de toque e passo toleraveis (V) para o peso de referencia."""
-        Cs = self._Cs()
-        c = self._C_PESO[self.peso]
-        E_toque = (1000.0 + 1.5 * Cs * self.rho_s) * c / math.sqrt(self.t)
-        E_passo = (1000.0 + 6.0 * Cs * self.rho_s) * c / math.sqrt(self.t)
-        return E_toque, E_passo, Cs
+        return _tensoes_toleraveis(self.rho, self.rho_s, self.malha.h_s,
+                                   self.t, self.peso)
 
     # ----------------------------------------------------------- solucao
     def resolver(self) -> dict:

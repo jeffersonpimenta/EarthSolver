@@ -1,0 +1,12 @@
+{
+    "malha_retangular": {
+        "comprimento_x": 70.0,
+        "comprimento_y": 70.0,
+        "espac_x": 7.0,
+        "espac_y": 7.0,
+        "prof_h": 0.5,
+        "d": 0.01,
+        "n_hastes": 20,
+        "comp_haste": 7.5
+    }
+}
