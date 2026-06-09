@@ -101,13 +101,15 @@ from earthsolver import Condutor, Eletrodo
 eletrodo = Eletrodo([Condutor((0, 0, 0.5), (70, 0, 0.5), raio=0.005), ...])
 ```
 
-Pela linha de comando (com `--plot` gera PNGs da malha e do mapa de potencial):
+Pela linha de comando (com `--plot` gera PNGs da malha e do mapa de potencial;
+`--plot-3d`/`--plot-malha-3d` geram as vistas em perspectiva 3D):
 
 ```bash
 earthsolver numerico --eletrodo cond.json --solo solo.json \
     --ig 1908 --t 0.5 --peso 70 --comp-alvo 3.5 \
     --rho-s 2500 --h-s 0.102 --exportar saida.json --raster potencial.json \
-    --plot potencial.png --plot-malha malha.png
+    --plot potencial.png --plot-malha malha.png \
+    --plot-3d potencial_3d.png --plot-malha-3d malha_3d.png
 ```
 
 `cond.json` aceita `{"condutores": [{"p1":[..],"p2":[..],"raio":..}, ...]}` ou
@@ -250,6 +252,10 @@ do potencial de superfície em V, para plotar por fora.
 
 **Gráficos** (`--plot potencial.png`, `--plot-malha malha.png`): PNG do mapa de
 potencial de superfície (com o contorno da malha sobreposto) e da vista em planta.
+**Gráficos 3D** (`--plot-3d potencial_3d.png`, `--plot-malha-3d malha_3d.png`):
+perspectiva da malha (condutores enterrados, hastes verticais) e a elevação do
+potencial — superfície 3D onde a altura é o potencial em V, com a malha desenhada
+no plano da base.
 
 **Modelo de solo** (`estratificar --saida solo.json`): o solo mais um bloco
 `ajuste` com a qualidade da inversão:

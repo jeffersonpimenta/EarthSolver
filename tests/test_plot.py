@@ -5,7 +5,13 @@ import os
 import numpy as np
 
 from earthsolver.numerico import Condutor, Eletrodo
-from earthsolver.plot import plot_malha, plot_potencial, salvar
+from earthsolver.plot import (
+    plot_malha,
+    plot_malha_3d,
+    plot_potencial,
+    plot_potencial_3d,
+    salvar,
+)
 
 
 def _eletrodo():
@@ -33,5 +39,19 @@ def test_plot_malha_salva_png(tmp_path):
 def test_plot_potencial_salva_png(tmp_path):
     png = tmp_path / "pot.png"
     ax = plot_potencial(_raster(), eletrodo=_eletrodo())
+    salvar(ax, png)
+    assert png.exists() and png.stat().st_size > 0
+
+
+def test_plot_malha_3d_salva_png(tmp_path):
+    png = tmp_path / "malha_3d.png"
+    ax = plot_malha_3d(_eletrodo())
+    salvar(ax, png)
+    assert png.exists() and png.stat().st_size > 0
+
+
+def test_plot_potencial_3d_salva_png(tmp_path):
+    png = tmp_path / "pot_3d.png"
+    ax = plot_potencial_3d(_raster(), eletrodo=_eletrodo())
     salvar(ax, png)
     assert png.exists() and png.stat().st_size > 0

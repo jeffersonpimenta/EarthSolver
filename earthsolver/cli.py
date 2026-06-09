@@ -112,6 +112,15 @@ def _numerico(args):
         from . import plot
         plot.salvar(plot.plot_malha(estudo.eletrodo), args.plot_malha)
         print(f"Vista da malha exportada para {args.plot_malha}.")
+    if getattr(args, "plot_3d", None):
+        from . import plot
+        plot.salvar(plot.plot_potencial_3d(estudo.raster, eletrodo=estudo.eletrodo),
+                    args.plot_3d)
+        print(f"Elevacao do potencial exportada para {args.plot_3d}.")
+    if getattr(args, "plot_malha_3d", None):
+        from . import plot
+        plot.salvar(plot.plot_malha_3d(estudo.eletrodo), args.plot_malha_3d)
+        print(f"Perspectiva da malha exportada para {args.plot_malha_3d}.")
     return estudo
 
 
@@ -150,6 +159,9 @@ def _dxf(args):
     if args.plot_malha:
         plot.salvar(plot.plot_malha(eletrodo), args.plot_malha)
         print(f"Vista da malha exportada para {args.plot_malha}.")
+    if args.plot_malha_3d:
+        plot.salvar(plot.plot_malha_3d(eletrodo), args.plot_malha_3d)
+        print(f"Perspectiva da malha exportada para {args.plot_malha_3d}.")
     return eletrodo
 
 
@@ -238,6 +250,10 @@ def main(argv=None):
     p_n.add_argument("--raster", help="arquivo JSON do mapa de potencial de superficie")
     p_n.add_argument("--plot", help="PNG do mapa de potencial de superficie")
     p_n.add_argument("--plot-malha", dest="plot_malha", help="PNG da vista da malha")
+    p_n.add_argument("--plot-3d", dest="plot_3d",
+                     help="PNG da elevacao do potencial em 3D")
+    p_n.add_argument("--plot-malha-3d", dest="plot_malha_3d",
+                     help="PNG da perspectiva (3D) da malha")
     p_n.set_defaults(func=_numerico)
 
     p_d = sub.add_parser("dxf", help="converte um DXF em geometria de eletrodo")
@@ -257,6 +273,8 @@ def main(argv=None):
                      help="nao roda o wizard; aplica --prof/--raio a tudo")
     p_d.add_argument("--plot-malha", dest="plot_malha",
                      help="PNG da vista da malha importada")
+    p_d.add_argument("--plot-malha-3d", dest="plot_malha_3d",
+                     help="PNG da perspectiva (3D) da malha importada")
     p_d.set_defaults(func=_dxf)
 
     args = parser.parse_args(argv)
