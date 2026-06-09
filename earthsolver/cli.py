@@ -103,7 +103,54 @@ def _numerico(args):
         estudo.exportar(args.exportar)
     if args.raster:
         estudo.exportar_raster(args.raster)
+    if getattr(args, "plot", None):
+        from . import plot
+        plot.salvar(plot.plot_potencial(estudo.raster, eletrodo=estudo.eletrodo),
+                    args.plot)
+        print(f"Mapa de potencial exportado para {args.plot}.")
+    if getattr(args, "plot_malha", None):
+        from . import plot
+        plot.salvar(plot.plot_malha(estudo.eletrodo), args.plot_malha)
+        print(f"Vista da malha exportada para {args.plot_malha}.")
     return estudo
+
+
+def _dxf(args):
+    """Converte um DXF em geometria de eletrodo ({condutores:[...]} JSON).
+
+    Sem --mapa: roda o wizard (se a sessao for interativa e nao vier --sem-wizard);
+    caso contrario aplica os defaults --prof/--raio a todas as layers.
+    """
+    from . import dxf, plot
+
+    mapa = None
+    if args.mapa:
+        with open(args.mapa) as f:
+            mapa = json.load(f)
+    elif sys.stdin.isatty() and not args.sem_wizard:
+        mapa = dxf.wizard_mapa(args.arquivo)
+        destino = args.salvar_mapa
+        if not destino:
+            resp = input("Salvar este mapa para reusar? caminho [Enter pula]: ")
+            destino = resp.strip() or None
+        if destino:
+            with open(destino, "w") as f:
+                json.dump(mapa, f, indent=2)
+            print(f"Mapa salvo em {destino}.")
+    else:
+        mapa = {"padrao": {"prof": args.prof, "raio": args.raio}, "layers": {}}
+
+    escala = args.escala if args.escala is not None else float(mapa.get("escala", 1.0))
+    eletrodo = dxf.from_dxf(args.arquivo, mapa=mapa, escala=escala)
+    condutores = [{"p1": list(c.p1), "p2": list(c.p2), "raio": c.raio}
+                  for c in eletrodo.condutores]
+    with open(args.saida, "w") as f:
+        json.dump({"condutores": condutores}, f, indent=2)
+    print(f"{len(condutores)} condutores exportados para {args.saida}.")
+    if args.plot_malha:
+        plot.salvar(plot.plot_malha(eletrodo), args.plot_malha)
+        print(f"Vista da malha exportada para {args.plot_malha}.")
+    return eletrodo
 
 
 def _analisar(args):
@@ -189,7 +236,28 @@ def main(argv=None):
                      help="espessura da camada superficial (m)")
     p_n.add_argument("--exportar", help="arquivo JSON de saida do resultado")
     p_n.add_argument("--raster", help="arquivo JSON do mapa de potencial de superficie")
+    p_n.add_argument("--plot", help="PNG do mapa de potencial de superficie")
+    p_n.add_argument("--plot-malha", dest="plot_malha", help="PNG da vista da malha")
     p_n.set_defaults(func=_numerico)
+
+    p_d = sub.add_parser("dxf", help="converte um DXF em geometria de eletrodo")
+    p_d.add_argument("arquivo", help="arquivo DXF de entrada")
+    p_d.add_argument("--mapa", help="JSON do mapa de layers (sem ele, roda o wizard)")
+    p_d.add_argument("--prof", type=float, default=0.5,
+                     help="profundidade padrao (m) quando sem mapa")
+    p_d.add_argument("--raio", type=float, default=0.005,
+                     help="raio padrao (m) quando sem mapa")
+    p_d.add_argument("--escala", type=float, default=None,
+                     help="fator de escala p/ metros (desenho em mm -> 0.001)")
+    p_d.add_argument("-o", "--saida", default="cond.json",
+                     help="JSON de saida da geometria (default cond.json)")
+    p_d.add_argument("--salvar-mapa", dest="salvar_mapa",
+                     help="salva o mapa montado pelo wizard para reuso")
+    p_d.add_argument("--sem-wizard", dest="sem_wizard", action="store_true",
+                     help="nao roda o wizard; aplica --prof/--raio a tudo")
+    p_d.add_argument("--plot-malha", dest="plot_malha",
+                     help="PNG da vista da malha importada")
+    p_d.set_defaults(func=_dxf)
 
     args = parser.parse_args(argv)
     try:

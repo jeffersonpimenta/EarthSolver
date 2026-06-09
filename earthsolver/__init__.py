@@ -9,10 +9,11 @@ from .solo import ModeloSolo
 from .estratificacao import Estratificador
 from .malha import Malha, EstudoAterramento
 from .numerico import Condutor, Eletrodo, EstudoNumerico
+from .dxf import from_dxf
 
 __all__ = [
     "ModeloSolo", "Estratificador", "Malha", "EstudoAterramento",
-    "Condutor", "Eletrodo", "EstudoNumerico",
+    "Condutor", "Eletrodo", "EstudoNumerico", "from_dxf",
 ]
 
 __version__ = "0.1.0"

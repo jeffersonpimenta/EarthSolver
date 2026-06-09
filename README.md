@@ -1,7 +1,8 @@
 # earthsolver
 
-Suite de analise de aterramento em Python (apenas `numpy`), no estilo do projeto
-**EletroSolver**. Permite:
+Suite de analise de aterramento em Python, no estilo do projeto **EletroSolver**.
+O nucleo de calculo depende so de `numpy`; a importacao de DXF e os graficos usam
+`ezdxf` e `matplotlib` (instalados junto). Permite:
 
 1. **Estratificar o solo** a partir de medicoes de resistividade pelo metodo de
    Wenner (NBR 7117), em modelos de N camadas.
@@ -100,16 +101,54 @@ from earthsolver import Condutor, Eletrodo
 eletrodo = Eletrodo([Condutor((0, 0, 0.5), (70, 0, 0.5), raio=0.005), ...])
 ```
 
-Pela linha de comando:
+Pela linha de comando (com `--plot` gera PNGs da malha e do mapa de potencial):
 
 ```bash
 earthsolver numerico --eletrodo cond.json --solo solo.json \
     --ig 1908 --t 0.5 --peso 70 --comp-alvo 3.5 \
-    --rho-s 2500 --h-s 0.102 --exportar saida.json --raster potencial.json
+    --rho-s 2500 --h-s 0.102 --exportar saida.json --raster potencial.json \
+    --plot potencial.png --plot-malha malha.png
 ```
 
 `cond.json` aceita `{"condutores": [{"p1":[..],"p2":[..],"raio":..}, ...]}` ou
 `{"malha_retangular": {"comprimento_x":70, ...}}`.
+
+## Importar uma malha de um DXF
+
+Em vez de escrever a geometria a mao, importe o desenho da malha (AutoCAD etc.).
+O DXF e plano (so `x, y`); a profundidade de enterramento, o raio do condutor e
+quais layers sao hastes verticais vem de um **mapa de layers**:
+
+```bash
+# 1. Converter o DXF em geometria. Sem --mapa, um assistente escaneia as layers
+#    e pergunta o que e cada uma (condutor/haste, profundidade, raio, comprimento).
+earthsolver dxf exemplos/malha.dxf --salvar-mapa layers.json -o cond.json
+
+# 2. Reaproveitando um mapa ja salvo (nao interativo):
+earthsolver dxf exemplos/malha.dxf --mapa layers.json -o cond.json --plot-malha malha.png
+
+# 3. Simular (o cond.json gerado entra direto no comando numerico):
+earthsolver numerico --eletrodo cond.json --solo exemplos/solo_uniforme.json \
+    --ig 1908 --t 0.5 --comp-alvo 7 --plot potencial.png
+```
+
+Mapa de layers (`exemplos/layers.json`):
+
+```json
+{
+  "escala": 1.0,
+  "padrao": { "prof": 0.5, "raio": 0.005 },
+  "layers": {
+    "MALHA":  { "prof": 0.5, "raio": 0.005 },
+    "HASTES": { "rod": true, "prof": 0.5, "comp": 7.5, "raio": 0.005 }
+  }
+}
+```
+
+- `escala`: fator para metros (desenho em mm -> `0.001`; tambem aceito via `--escala`).
+- Condutores vem de `LINE` / `LWPOLYLINE` / `POLYLINE`; em layer com `rod: true`,
+  `POINT` / `INSERT` / `CIRCLE` viram hastes verticais (de `prof` a `prof+comp`).
+- `ARC` / `SPLINE` / `ELLIPSE` ficam fora do escopo desta versao (sao ignorados com aviso).
 
 ## Arquitetura
 
@@ -128,4 +167,5 @@ usa a classe `EstudoNumerico` com geometria explicita de condutores; chamar
 - Impedancia interna dos condutores (assume eletrodo equipotencial perfeito).
 - Resposta em frequencia / acoplamento indutivo (analise resistiva / DC-equivalente).
 - Variacao lateral do solo (apenas estratificacao horizontal em camadas).
-- Interface grafica (saida via `imprimir_*`, `exportar` e raster em JSON).
+- App/GUI interativo (ha graficos PNG via `--plot` e importacao de DXF pela CLI,
+  mas a saida continua por `imprimir_*`, `exportar`, raster JSON e PNG).

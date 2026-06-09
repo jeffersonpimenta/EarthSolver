@@ -1,0 +1,8 @@
+{
+    "escala": 1.0,
+    "padrao": { "prof": 0.5, "raio": 0.005 },
+    "layers": {
+        "MALHA": { "prof": 0.5, "raio": 0.005 },
+        "HASTES": { "rod": true, "prof": 0.5, "comp": 7.5, "raio": 0.005 }
+    }
+}
