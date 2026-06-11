@@ -135,6 +135,10 @@ class Eletrodo:
             if comp_haste <= 0:
                 raise ValueError("comp_haste deve ser > 0 quando ha hastes")
             loop = cls._nos_perimetro(xs, ys)
+            if n_hastes > len(loop):
+                raise ValueError(
+                    f"n_hastes ({n_hastes}) excede os nos do perimetro "
+                    f"({len(loop)}); hastes coincidiriam")
             for i in range(n_hastes):
                 x, y = loop[int(round(i * len(loop) / n_hastes)) % len(loop)]
                 condutores.append(Condutor((x, y, prof_h),
@@ -199,12 +203,18 @@ class EstudoNumerico:
             raise ValueError("modelo_solo deve ser uma instancia de ModeloSolo")
         if not isinstance(eletrodo, Eletrodo):
             raise ValueError("eletrodo deve ser uma instancia de Eletrodo")
-        if Ig <= 0:
+        if Ig is None or Ig <= 0:
             raise ValueError("Ig deve ser > 0")
-        if t <= 0:
+        if t is None or t <= 0:
             raise ValueError("t deve ser > 0")
         if peso not in (50, 70):
             raise ValueError("peso deve ser 50 ou 70 (kg)")
+        if rho_s is not None and rho_s <= 0:
+            raise ValueError("rho_s deve ser > 0")
+        if h_s <= 0:
+            raise ValueError("h_s deve ser > 0")
+        if n_gauss < 1:
+            raise ValueError("n_gauss deve ser >= 1")
 
         self.solo = modelo_solo
         self.eletrodo = eletrodo

@@ -100,3 +100,11 @@ def test_validacoes_estratificador():
         Estratificador([2.0, 1.0], resistencias=[1.0, 1.0])  # nao crescente
     with pytest.raises(ValueError):
         Estratificador([1.0, 2.0])  # sem dados de resistencia/resistividade
+
+
+def test_estratificar_x0_com_camadas_erradas():
+    a = np.geomspace(1.0, 32.0, 8)
+    estrat = Estratificador(a, resistividades=100.0 * np.ones(8))
+    x0 = ModeloSolo(rho=[100.0, 50.0, 200.0], espessura=[2.0, 5.0])
+    with pytest.raises(ValueError, match="camadas"):
+        estrat.estratificar(2, x0=x0)

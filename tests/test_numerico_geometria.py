@@ -1,6 +1,5 @@
 """Testes de geometria do solver numerico (Condutor, Eletrodo, segmentar)."""
 
-import math
 
 import numpy as np
 import pytest
@@ -72,3 +71,19 @@ def test_malha_retangular_hastes():
                  if c.p1[0] == c.p2[0] and c.p1[1] == c.p2[1]]
     assert len(verticais) == 4
     assert all(max(c.p1[2], c.p2[2]) == pytest.approx(0.5 + 7.5) for c in verticais)
+
+
+def test_malha_retangular_hastes_demais_que_nos():
+    # 10x10 com espac. 5 -> 8 nos de perimetro; 12 hastes coincidiriam.
+    with pytest.raises(ValueError):
+        Eletrodo.malha_retangular(10.0, 10.0, 5.0, 5.0, 0.5, 0.01,
+                                  n_hastes=12, comp_haste=2.4)
+
+
+def test_malha_retangular_hastes_em_posicoes_unicas():
+    el = Eletrodo.malha_retangular(10.0, 10.0, 5.0, 5.0, 0.5, 0.01,
+                                   n_hastes=8, comp_haste=2.4)
+    hastes = [c for c in el.condutores
+              if c.p1[0] == c.p2[0] and c.p1[1] == c.p2[1]]
+    assert len(hastes) == 8
+    assert len({(c.p1[0], c.p1[1]) for c in hastes}) == 8

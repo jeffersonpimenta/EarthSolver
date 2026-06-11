@@ -36,7 +36,11 @@ def _ler_sondagem_csv(caminho):
     except ValueError:
         inicio = 1  # primeira linha e cabecalho
         col_rho = any("rho" in c or "resistivid" in c for c in cab)
-    for linha in linhas[inicio:]:
+    for num, linha in enumerate(linhas[inicio:], start=inicio + 1):
+        if len(linha) < 2:
+            raise ValueError(
+                f"linha {num} do CSV deve ter 2 colunas "
+                f"(espacamento, valor): {linha!r}")
         espac.append(float(linha[0]))
         valores.append(float(linha[1]))
     return espac, valores, col_rho
@@ -149,8 +153,7 @@ def _dxf(args):
     else:
         mapa = {"padrao": {"prof": args.prof, "raio": args.raio}, "layers": {}}
 
-    escala = args.escala if args.escala is not None else float(mapa.get("escala", 1.0))
-    eletrodo = dxf.from_dxf(args.arquivo, mapa=mapa, escala=escala)
+    eletrodo = dxf.from_dxf(args.arquivo, mapa=mapa, escala=args.escala)
     condutores = [{"p1": list(c.p1), "p2": list(c.p2), "raio": c.raio}
                   for c in eletrodo.condutores]
     with open(args.saida, "w") as f:
@@ -191,10 +194,13 @@ def _analisar(args):
 
     malha = Malha(**proj["malha"])
     falta = proj.get("falta", {})
+    Ig = falta.get("Ig", proj.get("Ig"))
+    t = falta.get("t", proj.get("t"))
+    if Ig is None or t is None:
+        raise ValueError(
+            "projeto deve definir 'Ig' e 't' (em 'falta' ou no topo)")
     estudo = EstudoAterramento(
-        solo, malha,
-        Ig=falta.get("Ig", proj.get("Ig")),
-        t=falta.get("t", proj.get("t")),
+        solo, malha, Ig=Ig, t=t,
         peso=falta.get("peso", proj.get("peso", 70)),
     )
     estudo.resolver()

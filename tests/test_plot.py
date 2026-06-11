@@ -1,6 +1,5 @@
 """Smoke tests dos graficos (earthsolver.plot). Usa o backend Agg via Figure."""
 
-import os
 
 import numpy as np
 

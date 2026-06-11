@@ -24,7 +24,7 @@ _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
 
 # Profundidade adimensional ate a qual [T - rho_1] e desprezivel (e^-24 ~ 4e-11).
 _LIM_INTEGRACAO = 12.0
-# Numero de pontos da regra de Simpson no intervalo de integracao.
+# Numero de pontos da regra do trapezio no intervalo de integracao.
 _N_PONTOS = 4001
 
 
@@ -93,7 +93,7 @@ def resistividade_aparente(rho, espessura, a):
     """Resistividade aparente de Wenner para espacamento(s) `a` (modelo direto).
 
     Implementa rho_a(a) = rho_1 + 2*a * integral [T - rho_1]*[J0(la)-J0(2la)] dl
-    pela regra de Simpson. Aceita `a` escalar ou array.
+    pela regra do trapezio. Aceita `a` escalar ou array.
     """
     rho = np.asarray(rho, dtype=float)
     espessura = np.asarray(espessura, dtype=float)

@@ -43,19 +43,23 @@ def escanear_layers(doc) -> dict:
     return scan
 
 
-def from_dxf(caminho, mapa=None, padrao=None, escala=1.0) -> Eletrodo:
+def from_dxf(caminho, mapa=None, padrao=None, escala=None) -> Eletrodo:
     """Le um DXF e devolve o `Eletrodo` correspondente.
 
-    mapa: dict {'padrao':..., 'layers':{...}} (ou None -> tudo com `padrao`).
+    mapa: dict {'padrao':..., 'layers':{...}, 'escala':...} (ou None -> tudo
+    com `padrao`).
     padrao: config da layer nao listada, se `mapa` nao trouxer 'padrao'.
-    escala: multiplica as coordenadas x, y (CAD em mm -> 0.001). prof/raio/comp
-    sao tomados em metros (nao escalam).
+    escala: multiplica as coordenadas x, y (CAD em mm -> 0.001); se None, usa
+    a 'escala' do mapa (default 1.0). prof/raio/comp sao tomados em metros
+    (nao escalam).
     """
     import ezdxf
 
     doc = ezdxf.readfile(str(caminho))
     layers = (mapa or {}).get("layers", {})
     padrao_cfg = (mapa or {}).get("padrao") or padrao or _PADRAO
+    if escala is None:
+        escala = float((mapa or {}).get("escala", 1.0))
 
     condutores = []
     for e in doc.modelspace():
@@ -121,8 +125,12 @@ def wizard_mapa(caminho, ler=input, escrever=print) -> dict:
         tipos = info["tipos"]
         sug = "h" if tipos <= PONTO_TIPOS else "c"
         escrever(f"Layer '{lay}': {sorted(tipos)} ({info['n']} entidades)")
-        resp = (ler(f"  [c]ondutor / [h]aste / [i]gnorar [{sug}]: ") or sug)
-        resp = resp.strip().lower()[:1] or sug
+        while True:
+            resp = (ler(f"  [c]ondutor / [h]aste / [i]gnorar [{sug}]: ") or sug)
+            resp = resp.strip().lower()[:1] or sug
+            if resp in ("c", "h", "i"):
+                break
+            escrever("  resposta invalida; use c, h ou i.")
         if resp == "i":
             continue
         prof = _ler_float(ler, "  profundidade (m) [0.5]: ", 0.5)

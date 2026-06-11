@@ -64,3 +64,18 @@ def test_convergencia_rg_refinando():
     grosso = EstudoNumerico(solo, _malha_ieee(), Ig=1908.0, t=0.5, comp_alvo=7.0).resolver()
     fino = EstudoNumerico(solo, _malha_ieee(), Ig=1908.0, t=0.5, comp_alvo=3.5).resolver()
     assert fino["Rg"] == pytest.approx(grosso["Rg"], rel=0.05)
+
+
+def test_validacoes_estudo_numerico():
+    solo = ModeloSolo([100.0], [])
+    haste = Eletrodo([Condutor((0, 0, 0.0), (0, 0, 3.0), 0.01)])
+    with pytest.raises(ValueError):
+        EstudoNumerico(solo, haste, Ig=10.0, t=0.5, rho_s=-2500.0)
+    with pytest.raises(ValueError):
+        EstudoNumerico(solo, haste, Ig=10.0, t=0.5, h_s=0.0)
+    with pytest.raises(ValueError):
+        EstudoNumerico(solo, haste, Ig=10.0, t=0.5, n_gauss=0)
+    with pytest.raises(ValueError):
+        EstudoNumerico(solo, haste, Ig=None, t=0.5)
+    with pytest.raises(ValueError):
+        EstudoNumerico(solo, haste, Ig=10.0, t=None)

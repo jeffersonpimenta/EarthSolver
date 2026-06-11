@@ -9,7 +9,6 @@ Oraculos independentes que fixam a formula antes do solver:
 
 import math
 
-import numpy as np
 import pytest
 
 from earthsolver.green import potencial_camadas

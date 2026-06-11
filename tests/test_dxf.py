@@ -115,6 +115,30 @@ def test_wizard_le_insunits_para_sugerir_escala(tmp_path):
     assert mapa["escala"] == pytest.approx(0.001)
 
 
+def test_from_dxf_honra_escala_do_mapa(tmp_path):
+    arq = _criar_dxf(tmp_path / "m.dxf")
+    el = from_dxf(arq, mapa={**MAPA, "escala": 0.001})
+    linha = next(c for c in el.condutores if c.p1[2] == c.p2[2])
+    assert linha.p2 == pytest.approx((0.01, 0.0, 0.5))   # 10 mm -> 0.01 m
+
+
+def test_escala_explicita_sobrepoe_a_do_mapa(tmp_path):
+    arq = _criar_dxf(tmp_path / "m.dxf")
+    el = from_dxf(arq, mapa={**MAPA, "escala": 0.001}, escala=1.0)
+    linha = next(c for c in el.condutores if c.p1[2] == c.p2[2])
+    assert linha.p2 == pytest.approx((10.0, 0.0, 0.5))
+
+
+def test_wizard_repergunta_resposta_invalida(tmp_path):
+    arq = _criar_dxf(tmp_path / "m.dxf")
+    # escala, MALHA: "x" (invalida) -> repergunta -> "c", prof, raio;
+    # HASTES: "h", prof, raio, comp
+    ler = _ler_roteirizado(["1", "x", "c", "0.7", "0.006",
+                            "h", "0.7", "0.01", "2.4"])
+    mapa = wizard_mapa(arq, ler=ler, escrever=lambda *a, **k: None)
+    assert mapa["layers"]["MALHA"] == {"prof": 0.7, "raio": 0.006}
+
+
 def test_wizard_respostas_explicitas(tmp_path):
     arq = _criar_dxf(tmp_path / "m.dxf")
     # escala=1, MALHA condutor prof 0.7 raio 0.006, HASTES haste prof 0.7 raio 0.01 comp 2.4

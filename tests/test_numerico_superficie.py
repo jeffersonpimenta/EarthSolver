@@ -1,7 +1,6 @@
 """Testes do campo de potencial de superficie, toque/passo e raster (numerico)."""
 
 import numpy as np
-import pytest
 
 from earthsolver.numerico import Eletrodo, EstudoNumerico
 from earthsolver.solo import ModeloSolo

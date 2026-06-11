@@ -131,6 +131,9 @@ class Estratificador:
             return self._ajuste_uniforme()
 
         if x0 is not None:
+            if x0.n_camadas != n_camadas:
+                raise ValueError(
+                    f"x0 tem {x0.n_camadas} camadas; esperado {n_camadas}")
             rho0, espessura0 = np.asarray(x0.rho), np.asarray(x0.espessura)
         else:
             rho0, espessura0 = self._chute_inicial(n_camadas)

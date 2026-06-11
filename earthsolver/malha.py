@@ -100,9 +100,9 @@ class EstudoAterramento:
             raise ValueError("modelo_solo deve ser uma instancia de ModeloSolo")
         if not isinstance(malha, Malha):
             raise ValueError("malha deve ser uma instancia de Malha")
-        if Ig <= 0:
+        if Ig is None or Ig <= 0:
             raise ValueError("Ig deve ser > 0")
-        if t <= 0:
+        if t is None or t <= 0:
             raise ValueError("t deve ser > 0")
         if peso not in self._C_PESO:
             raise ValueError("peso deve ser 50 ou 70 (kg)")
