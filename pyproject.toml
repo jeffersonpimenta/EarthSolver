@@ -9,7 +9,7 @@ description = "Suite de analise de aterramento (estratificacao de solo e malha p
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "GPL-3.0-or-later" }
-dependencies = ["numpy", "ezdxf", "matplotlib"]
+dependencies = ["numpy", "scipy", "ezdxf", "matplotlib"]
 
 [project.optional-dependencies]
 dev = ["pytest"]

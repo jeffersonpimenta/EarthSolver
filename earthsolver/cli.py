@@ -100,7 +100,8 @@ def _numerico(args):
     solo = _carregar_solo(args.solo)
     eletrodo = _carregar_eletrodo(args.eletrodo)
     estudo = EstudoNumerico(solo, eletrodo, Ig=args.ig, t=args.t, peso=args.peso,
-                            comp_alvo=args.comp_alvo, rho_s=args.rho_s, h_s=args.h_s)
+                            comp_alvo=args.comp_alvo, rho_s=args.rho_s, h_s=args.h_s,
+                            precisao=args.precisao, mem_mb=args.mem_mb)
     estudo.resolver()
     estudo.imprimir_resultado()
     if args.exportar:
@@ -175,7 +176,8 @@ def _numerico(args):
         else:
             alvos = [args.comp_alvo * k for k in (3.0, 2.0, 1.0, 0.6)]
         dados = estudo_convergencia(solo, eletrodo, args.ig, args.t, alvos,
-                                    peso=args.peso, rho_s=args.rho_s, h_s=args.h_s)
+                                    peso=args.peso, rho_s=args.rho_s, h_s=args.h_s,
+                                    precisao=args.precisao, mem_mb=args.mem_mb)
         plot.salvar(plot.plot_convergencia(dados), args.plot_convergencia)
         print(f"Curva de convergencia exportada para {args.plot_convergencia}.")
     return estudo
@@ -305,6 +307,12 @@ def main(argv=None):
                      help="resistividade da camada superficial (brita), Ohm.m")
     p_n.add_argument("--h-s", type=float, default=0.1, dest="h_s",
                      help="espessura da camada superficial (m)")
+    p_n.add_argument("--precisao", choices=("double", "single"), default="double",
+                     help="precisao da montagem/solucao: double (float64) ou "
+                          "single (float32, ~metade da RAM)")
+    p_n.add_argument("--mem-mb", type=float, default=256.0, dest="mem_mb",
+                     help="orcamento de RAM (MB) por bloco da montagem da matriz; "
+                          "menor = menos memoria de pico (comp-alvo pequeno)")
     p_n.add_argument("--exportar", help="arquivo JSON de saida do resultado")
     p_n.add_argument("--raster", help="arquivo JSON do mapa de potencial de superficie")
     p_n.add_argument("--plot", help="PNG do mapa de potencial de superficie")

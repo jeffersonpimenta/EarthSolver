@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .green import potencial_resto
 from .seguranca import tensoes_toleraveis
 from .solo import ModeloSolo
 
@@ -175,9 +174,13 @@ def _phi_seg(P, A, B, rho, raio):
     AB = B - A
     L = np.linalg.norm(AB, axis=1)
     u = AB / L[:, None]
-    PA = P[:, None, :] - A[None, :, :]
-    d1sq = np.einsum("nmk,nmk->nm", PA, PA)
-    s0 = np.einsum("nmk,mk->nm", PA, u)
+    # |P - A|^2 e (P - A).u via produtos de Gram (BLAS), sem materializar o
+    # intermediario 3D (Nf, M, 3) -- esse era o estouro de RAM para M grande.
+    Psq = np.einsum("nk,nk->n", P, P)              # (Nf,)
+    Asq = np.einsum("mk,mk->m", A, A)              # (M,)
+    d1sq = Psq[:, None] - 2.0 * (P @ A.T) + Asq[None, :]
+    Adotu = np.einsum("mk,mk->m", A, u)            # (M,)
+    s0 = P @ u.T - Adotu[None, :]
     pe = np.sqrt(np.maximum(d1sq - s0 ** 2, 0.0) + raio[None, :] ** 2)
     val = np.arcsinh((L[None, :] - s0) / pe) + np.arcsinh(s0 / pe)
     return rho[None, :] / (4.0 * np.pi * L[None, :]) * val
@@ -198,7 +201,8 @@ class EstudoNumerico:
     """
 
     def __init__(self, modelo_solo, eletrodo, Ig, t, peso=70, comp_alvo=2.0,
-                 rho_s=None, h_s=0.1, n_gauss=4, passo_raster=2.0, margem_raster=5.0):
+                 rho_s=None, h_s=0.1, n_gauss=4, passo_raster=2.0, margem_raster=5.0,
+                 precisao="double", mem_mb=256.0):
         if not isinstance(modelo_solo, ModeloSolo):
             raise ValueError("modelo_solo deve ser uma instancia de ModeloSolo")
         if not isinstance(eletrodo, Eletrodo):
@@ -215,7 +219,13 @@ class EstudoNumerico:
             raise ValueError("h_s deve ser > 0")
         if n_gauss < 1:
             raise ValueError("n_gauss deve ser >= 1")
+        if precisao not in ("double", "single"):
+            raise ValueError("precisao deve ser 'double' ou 'single'")
+        if mem_mb <= 0:
+            raise ValueError("mem_mb deve ser > 0")
 
+        self._dtype = np.float32 if precisao == "single" else np.float64
+        self._mem_mb = float(mem_mb)
         self.solo = modelo_solo
         self.eletrodo = eletrodo
         self.Ig = float(Ig)
@@ -227,7 +237,8 @@ class EstudoNumerico:
 
         interfaces = np.cumsum(modelo_solo.espessura)
         self.segs = eletrodo.segmentar(comp_alvo, interfaces)
-        self.rho_seg = np.array([modelo_solo.rho[c] for c in self.segs.camada])
+        self.rho_seg = np.array([modelo_solo.rho[c] for c in self.segs.camada],
+                                dtype=self._dtype)
         self.rho_eq = modelo_solo.uniforme_equivalente()
         self.rho_s = float(rho_s) if rho_s is not None else self.rho_eq
         self.h_s = float(h_s)
@@ -243,34 +254,61 @@ class EstudoNumerico:
         self.resultado = None
 
     # --------------------------------------------------------- matriz R
+    def _bloco_auto(self, M, ng):
+        """Linhas (segmentos-campo) por bloco para limitar a RAM de pico da montagem.
+
+        Cada bloco materializa ~k arrays temporarios (Nf, M) com Nf = bs*ng.
+        Escolhe bs para esses temporarios caberem em self._mem_mb.
+        """
+        itemsize = np.dtype(self._dtype).itemsize
+        k = 8                              # ~arrays (Nf, M) vivos por bloco
+        orcamento = self._mem_mb * 1024.0 * 1024.0
+        bs = int(orcamento / max(1, k * ng * M * itemsize))
+        return max(1, min(M, bs))
+
     def montar_resistencias(self):
-        """Monta a matriz de resistencias R (M x M), simetrica positiva-definida."""
+        """Monta a matriz de resistencias R (M x M), simetrica positiva-definida.
+
+        Processa os pontos de campo em blocos de linhas para que a RAM de pico
+        fique limitada por mem_mb (~O(bs*M)) em vez de O(M^2*ng) -- e o que
+        permite comp_alvo pequeno (M grande) sem estourar a memoria.
+        """
         s = self.segs
         M = s.n
         ng = self.n_gauss
-        meia, dir_, mid = s.meia, s.dir, s.mid
-        raio = s.raio
+        dt = self._dtype
+        meia = s.meia.astype(dt)
+        dir_ = s.dir.astype(dt)
+        mid = s.mid.astype(dt)
+        raio = s.raio.astype(dt)
         L = 2.0 * meia
         A = mid - meia[:, None] * dir_
         B = mid + meia[:, None] * dir_
-        esp = np.array([0.0, 0.0, 1.0])                 # espelho z -> -z
+        esp = np.array([0.0, 0.0, 1.0], dtype=dt)       # espelho z -> -z
         A_img = A - 2.0 * A[:, 2][:, None] * esp
         B_img = B - 2.0 * B[:, 2][:, None] * esp
         self._A, self._B, self._A_img, self._B_img = A, B, A_img, B_img
 
         xi, wg = _gauss(ng)
+        wg = wg.astype(dt)
         # pontos de Gauss de cada segmento (campo): (M, ng, 3)
-        Pg = mid[:, None, :] + xi[None, :, None] * meia[:, None, None] * dir_[:, None, :]
-        P = Pg.reshape(M * ng, 3)
+        Pg = mid[:, None, :] + xi.astype(dt)[None, :, None] * meia[:, None, None] * dir_[:, None, :]
 
-        phi_dir = _phi_seg(P, A, B, self.rho_seg, raio)        # (Nf, M)
-        phi_img = _phi_seg(P, A_img, B_img, self.rho_seg, raio)
-        phi = (phi_dir + phi_img).reshape(M, ng, M)
-        R = np.einsum("a,iaj->ij", wg, phi)
+        R = np.empty((M, M), dtype=dt)
+        self_img = np.empty(M, dtype=dt)
+        bs = self._bloco_auto(M, ng)
+        for i0 in range(0, M, bs):                       # blocos de pontos de campo
+            i1 = min(i0 + bs, M)
+            Pb = Pg[i0:i1].reshape((i1 - i0) * ng, 3)
+            phii = _phi_seg(Pb, A_img, B_img, self.rho_seg, raio)   # (b*ng, M)
+            phi = (_phi_seg(Pb, A, B, self.rho_seg, raio) + phii).reshape(i1 - i0, ng, M)
+            R[i0:i1, :] = np.einsum("a,iaj->ij", wg, phi)
+            ph3 = phii.reshape(i1 - i0, ng, M)
+            r = np.arange(i1 - i0)
+            self_img[i0:i1] = np.einsum("a,ia->i", wg, ph3[r, :, i0 + r])
 
         # diagonal: auto-potencial direto (forma fechada) + imagem (quadratura)
         self_dir = self.rho_seg / (2.0 * np.pi * L) * (np.log(2.0 * L / raio) - 1.0)
-        self_img = np.einsum("a,iai->i", wg, phi_img.reshape(M, ng, M))
         np.fill_diagonal(R, self_dir + self_img)
 
         if self.solo.n_camadas > 1:
@@ -280,22 +318,48 @@ class EstudoNumerico:
         return self.R
 
     def _resto_camadas(self, Pg, wg):
-        """Termo de correcao de camadas (G - direta-imagem), por quadratura dupla.
+        """Termo de correcao de camadas (G - direta-imagem), vetorizado.
 
         So entra quando o solo tem mais de uma camada; para solo uniforme e zero.
+        Constroi o sistema do Green UMA vez (preparar_resto) e os brackets de
+        todas as profundidades distintas; avalia a integral de Hankel vetorizada
+        por segmento-fonte, sem o laco Python ponto-a-ponto que dominava o custo.
         """
+        from .green import (preparar_resto, brackets_resto, grade_rh,
+                            avaliador_resto)
         s = self.segs
         M = s.n
         ng = self.n_gauss
-        Pf = Pg.reshape(M * ng, 3)
+        Pf = Pg.reshape(M * ng, 3).astype(float)
+        z_all = Pf[:, 2]
+        ell = min(float(np.asarray(self.solo.espessura, float).min()),
+                  2.0 * float(z_all.min()))
+        ctx = preparar_resto(self.solo.rho, self.solo.espessura, ell)
+
+        D = np.unique(z_all)                             # profundidades distintas (poucas)
+        nd = D.size
+        ZF, ZS = np.meshgrid(D, D, indexing="ij")
+        brk = brackets_resto(ctx, ZF.ravel(), ZS.ravel())    # (nd*nd, L)
+        di = np.searchsorted(D, z_all)                   # indice de profundidade (M*ng,)
+
+        xy = Pf[:, :2]
+        # g(r_h) e suave -> tabula por par de profundidade e interpola, trocando
+        # M^2*ng^2 integrais de Hankel por interpolacao barata (vence p/ M grande).
+        rh_max = float(np.hypot(np.ptp(xy[:, 0]), np.ptp(xy[:, 1])))
+        rh_grid = grade_rh(rh_max, ell)
+        evalg = avaliador_resto(ctx, brk, nd * nd, rh_grid, M * M * ng * ng)
+
+        wgf = np.asarray(wg, dtype=float)
         Rrem = np.zeros((M, M))
         for j in range(M):                               # fonte: segmento j
-            for b in range(ng):
-                xs, ys, zs = Pg[j, b]
-                rh = np.hypot(Pf[:, 0] - xs, Pf[:, 1] - ys)
-                grem = potencial_resto(self.solo.rho, self.solo.espessura,
-                                       rh, Pf[:, 2], zs).reshape(M, ng)
-                Rrem[:, j] += wg[b] * (grem @ wg)
+            sj = slice(j * ng, (j + 1) * ng)
+            sx = xy[sj]                                  # (ng, 2)
+            sdi = di[sj]                                 # (ng,)
+            rh = np.hypot(xy[:, 0:1] - sx[None, :, 0],
+                          xy[:, 1:2] - sx[None, :, 1])   # (M*ng, ng)
+            pair = di[:, None] * nd + sdi[None, :]       # (M*ng, ng) -> linha em table
+            g = evalg(pair, rh).reshape(M, ng, ng)
+            Rrem[:, j] = np.einsum("iab,a,b->i", g, wgf, wgf)
         return Rrem
 
     # --------------------------------------------------------- solucao
@@ -307,7 +371,13 @@ class EstudoNumerico:
         """
         if self.R is None:
             self.montar_resistencias()
-        y = np.linalg.solve(self.R, np.ones(self.segs.n))
+        b = np.ones(self.segs.n, dtype=self.R.dtype)
+        try:                                  # R e simetrica positiva-definida
+            from scipy.linalg import cho_factor, cho_solve
+            c = cho_factor(self.R, lower=True, check_finite=False)
+            y = cho_solve(c, b, check_finite=False)
+        except (ImportError, np.linalg.LinAlgError):
+            y = np.linalg.solve(self.R, b)
         Rg = 1.0 / float(y.sum())
         self.V = self.Ig * Rg
         self.I = self.V * y
@@ -361,20 +431,55 @@ class EstudoNumerico:
         return Phi
 
     def _superficie_resto(self, P):
-        """Correcao de camadas no potencial de superficie (solo N-camadas)."""
+        """Correcao de camadas no potencial de superficie (solo N-camadas).
+
+        Mesma vetorizacao de _resto_camadas: sistema do Green montado uma vez e
+        integral de Hankel vetorizada por segmento-fonte (sem laco ponto-a-ponto).
+        """
+        from .green import (preparar_resto, brackets_resto, grade_rh,
+                            avaliador_resto)
         s = self.segs
+        M = s.n
         ng = self.n_gauss
         xi, wg = _gauss(ng)
-        mid, meia, dir_ = s.mid, s.meia, s.dir
+        mid = s.mid.astype(float)
+        meia = s.meia.astype(float)
+        dir_ = s.dir.astype(float)
         Pg = mid[:, None, :] + xi[None, :, None] * meia[:, None, None] * dir_[:, None, :]
+        Psrc = Pg.reshape(M * ng, 3)
+        P = np.asarray(P, dtype=float)
+        z_obs = P[:, 2]
+        z_src = Psrc[:, 2]
+        ell = min(float(np.asarray(self.solo.espessura, float).min()),
+                  float(z_obs.min() + z_src.min()))
+        ctx = preparar_resto(self.solo.rho, self.solo.espessura, ell)
+
+        Do = np.unique(z_obs)
+        Ds = np.unique(z_src)
+        ns = Ds.size
+        ZO, ZS = np.meshgrid(Do, Ds, indexing="ij")
+        brk = brackets_resto(ctx, ZO.ravel(), ZS.ravel())    # (no*ns, L)
+        io = np.searchsorted(Do, z_obs)                  # (Np,)
+        isrc = np.searchsorted(Ds, z_src)                # (M*ng,)
+
+        # tabela g(r_h) por par (obs, fonte) + interpolacao (ver _resto_camadas)
+        xall = np.concatenate([P[:, 0], Psrc[:, 0]])
+        yall = np.concatenate([P[:, 1], Psrc[:, 1]])
+        rh_max = float(np.hypot(np.ptp(xall), np.ptp(yall)))
+        rh_grid = grade_rh(rh_max, ell)
+        evalg = avaliador_resto(ctx, brk, Do.size * ns, rh_grid, len(P) * M * ng)
+
+        wgf = np.asarray(wg, dtype=float)
         extra = np.zeros(len(P))
-        for j in range(s.n):
-            for b in range(ng):
-                xs, ys, zs = Pg[j, b]
-                rh = np.hypot(P[:, 0] - xs, P[:, 1] - ys)
-                grem = potencial_resto(self.solo.rho, self.solo.espessura,
-                                       rh, P[:, 2], zs)
-                extra += wg[b] * self.I[j] * grem
+        for j in range(M):                               # fonte: segmento j
+            sj = slice(j * ng, (j + 1) * ng)
+            sx = Psrc[sj, :2]
+            sis = isrc[sj]
+            rh = np.hypot(P[:, 0:1] - sx[None, :, 0],
+                          P[:, 1:2] - sx[None, :, 1])     # (Np, ng)
+            pair = io[:, None] * ns + sis[None, :]        # (Np, ng) -> linha em table
+            g = evalg(pair, rh)                           # (Np, ng)
+            extra += self.I[j] * (g @ wgf)
         return extra
 
     def _calcular_superficie(self):
