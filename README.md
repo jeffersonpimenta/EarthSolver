@@ -101,8 +101,12 @@ from earthsolver import Condutor, Eletrodo
 eletrodo = Eletrodo([Condutor((0, 0, 0.5), (70, 0, 0.5), raio=0.005), ...])
 ```
 
-Pela linha de comando (com `--plot` gera PNGs da malha e do mapa de potencial;
-`--plot-3d`/`--plot-malha-3d` geram as vistas em perspectiva 3D):
+Pela linha de comando, com gráficos PNG. Potencial/malha: `--plot`,
+`--plot-malha`, `--plot-3d`, `--plot-malha-3d`. Mapas de segurança: `--plot-toque`,
+`--plot-passo`, `--plot-margem` (utilização %), `--plot-perfis` (cortes centrais),
+`--plot-corrente` (corrente drenada por segmento). Superfícies 3D dos campos:
+`--plot-toque-3d`, `--plot-passo-3d`. Convergência da discretização:
+`--plot-convergencia` (varre os comprimentos-alvo de `--conv-alvos`):
 
 ```bash
 earthsolver numerico --eletrodo cond.json --solo solo.json \
@@ -111,6 +115,9 @@ earthsolver numerico --eletrodo cond.json --solo solo.json \
     --plot potencial.png --plot-malha malha.png \
     --plot-3d potencial_3d.png --plot-malha-3d malha_3d.png
 ```
+
+Para o pipeline completo (DXF → estudo + todos os gráficos), veja a seção
+**Exemplo completo** abaixo.
 
 `cond.json` aceita `{"condutores": [{"p1":[..],"p2":[..],"raio":..}, ...]}` ou
 `{"malha_retangular": {"comprimento_x":70, ...}}`.
@@ -151,6 +158,35 @@ Mapa de layers (`exemplos/layers.json`):
 - Condutores vêm de `LINE` / `LWPOLYLINE` / `POLYLINE`; em layer com `rod: true`,
   `POINT` / `INSERT` / `CIRCLE` viram hastes verticais (de `prof` a `prof+comp`).
 - `ARC` / `SPLINE` / `ELLIPSE` ficam fora do escopo desta versão (são ignorados com aviso).
+
+## Exemplo completo (DXF → estudo + todos os gráficos)
+
+Importa a malha de um DXF e roda o estudo numérico gerando todos os gráficos de
+uma vez: mapa e superfície 3D do potencial, mapas de tensão de toque e de passo,
+mapa de margem de segurança, perfis em corte, distribuição de corrente, superfícies
+3D de toque/passo e a curva de convergência.
+
+```bash
+# 1. DXF -> geometria (cond.json) + vista da malha
+earthsolver dxf exemplos/malha.dxf --mapa exemplos/layers.json -o cond.json \
+    --plot-malha malha.png
+
+# 2. Estudo numérico + todos os gráficos
+earthsolver numerico --eletrodo cond.json --solo exemplos/solo_uniforme.json \
+    --ig 2000 --t 0.01 --comp-alvo 1 \
+    --plot potencial.png --plot-3d potencial3d.png \
+    --plot-toque toque.png --plot-passo passo.png --plot-margem margem.png \
+    --plot-perfis perfil.png --plot-corrente corrente.png \
+    --plot-toque-3d toque3d.png --plot-passo-3d passo3d.png \
+    --plot-convergencia conv.png --conv-alvos "8,5,3,2,1"
+```
+
+> **Dimensione `--comp-alvo` pela geometria.** O nº de segmentos é
+> `M ≈ L_total / comp_alvo` e a montagem da matriz custa `~M²` em tempo e memória.
+> A malha de `exemplos/malha.dxf` tem ~1690 m: `--comp-alvo 1` dá ~1700 segmentos
+> (segundos); `--comp-alvo 0.1` daria ~17000 segmentos (dezenas de GB → inviável).
+> Use `--plot-convergencia` para refinar `comp-alvo` só até `Rg` estabilizar.
+> O mesmo vale para os valores finos em `--conv-alvos`.
 
 ## Formatos de arquivo (entradas e saídas)
 
@@ -256,6 +292,19 @@ potencial de superfície (com o contorno da malha sobreposto) e da vista em plan
 perspectiva da malha (condutores enterrados, hastes verticais) e a elevação do
 potencial — superfície 3D onde a altura é o potencial em V, com a malha desenhada
 no plano da base.
+
+**Mapas de segurança** (comando `numerico`):
+- `--plot-toque` / `--plot-passo`: campos de tensão de toque (`GPR − Φ`) e de passo
+  (diferença de potencial a 1 m, pior direção). Traçam a curva do limite tolerável
+  e hachuram onde excede (toque restrito à projeção da malha; passo em toda a área).
+- `--plot-margem`: mapa de utilização `max(toque/E_toque, passo/E_passo)` em %, com
+  a curva de 100 % (acima dela = reprovado).
+- `--plot-perfis`: perfis em corte pelas linhas centrais (potencial, toque e passo
+  com os limites) — apresentação no estilo IEEE 80.
+- `--plot-corrente`: distribuição da corrente drenada por segmento (picos nos cantos).
+- `--plot-toque-3d` / `--plot-passo-3d`: superfícies 3D dos campos de toque e passo.
+- `--plot-convergencia` (com `--conv-alvos`): `Rg` e `GPR` vs nº de segmentos, para
+  validar a discretização.
 
 **Modelo de solo** (`estratificar --saida solo.json`): o solo mais um bloco
 `ajuste` com a qualidade da inversão:
