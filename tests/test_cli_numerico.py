@@ -50,3 +50,23 @@ def test_cli_numerico_exporta_raster(tmp_path):
                "--raster", str(rast)])
     assert rc == 0 and rast.exists()
     assert "phi" in json.loads(rast.read_text())
+
+
+def test_cli_numerico_plots_seguranca(tmp_path):
+    solo = tmp_path / "solo.json"
+    _escrever(solo, {"rho": [400.0], "espessura": []})
+    cond = tmp_path / "cond.json"
+    _escrever(cond, _MALHA)
+    toque = tmp_path / "toque.png"
+    passo = tmp_path / "passo.png"
+    margem = tmp_path / "margem.png"
+    perfis = tmp_path / "perfis.png"
+    corrente = tmp_path / "corrente.png"
+    rc = main(["numerico", "--eletrodo", str(cond), "--solo", str(solo),
+               "--ig", "1908", "--t", "0.5", "--comp-alvo", "7",
+               "--plot-toque", str(toque), "--plot-passo", str(passo),
+               "--plot-margem", str(margem), "--plot-perfis", str(perfis),
+               "--plot-corrente", str(corrente)])
+    assert rc == 0
+    for png in (toque, passo, margem, perfis, corrente):
+        assert png.exists() and png.stat().st_size > 0

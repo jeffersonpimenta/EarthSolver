@@ -238,6 +238,8 @@ class EstudoNumerico:
         self.Em = None
         self.Es = None
         self.raster = None
+        self.raster_toque = None
+        self.raster_passo = None
         self.resultado = None
 
     # --------------------------------------------------------- matriz R
@@ -380,6 +382,9 @@ class EstudoNumerico:
         Phi = self.potencial_superficie(base)
         self.raster = (X, Y, Phi.reshape(X.shape))
 
+        # campo de toque: GPR - potencial de superficie (todo o raster).
+        self.raster_toque = (X, Y, self.V - Phi.reshape(X.shape))
+
         # toque: pior caso = GPR - menor potencial dentro da projecao da malha.
         dentro = (base[:, 0] >= xmin) & (base[:, 0] <= xmax) \
             & (base[:, 1] >= ymin) & (base[:, 1] <= ymax)
@@ -387,10 +392,23 @@ class EstudoNumerico:
             dentro = np.ones(len(base), dtype=bool)
         self.Em = self.V - float(Phi[dentro].min())
 
-        # passo: maior diferenca de potencial entre pontos a 1 m (em x e em y).
+        # campo de passo: maior diferenca de potencial entre pontos a 1 m
+        # (em x e em y), por ponto. Es = pior caso de todo o campo.
         dphi_x = self.potencial_superficie(base + [1.0, 0.0]) - Phi
         dphi_y = self.potencial_superficie(base + [0.0, 1.0]) - Phi
-        self.Es = float(max(np.abs(dphi_x).max(), np.abs(dphi_y).max()))
+        passo_pt = np.maximum(np.abs(dphi_x), np.abs(dphi_y))
+        self.raster_passo = (X, Y, passo_pt.reshape(X.shape))
+        self.Es = float(passo_pt.max())
+
+    def dados_corrente(self):
+        """Geometria e corrente drenada por segmento: (A, B, I).
+
+        A, B (M,3): extremos de cada segmento; I (M,): corrente drenada para o
+        solo por segmento (picos nos cantos da malha). Requer resolver() previo.
+        """
+        if self.I is None:
+            raise ValueError("rode resolver() antes de consultar a corrente")
+        return self._A, self._B, self.I
 
     # --------------------------------------------------------- relatorio
     def imprimir_resultado(self, cd: int = 2) -> None:

@@ -52,3 +52,42 @@ def test_brita_eleva_tensoes_toleraveis():
     com = _est(rho_s=2500.0, h_s=0.102).resolver()
     assert com["E_toque"] > sem["E_toque"]
     assert com["E_passo"] > sem["E_passo"]
+
+
+def test_raster_toque_passo_existem_e_consistentes():
+    est = _est()
+    est.resolver()
+    X, Y, _ = est.raster
+    Xt, Yt, toque = est.raster_toque
+    Xs, Ys, passo = est.raster_passo
+    # mesma grade do raster de potencial
+    assert toque.shape == passo.shape == X.shape
+    assert np.array_equal(Xt, X) and np.array_equal(Yt, Y)
+    assert np.array_equal(Xs, X) and np.array_equal(Ys, Y)
+    assert np.all(np.isfinite(toque)) and np.all(np.isfinite(passo))
+
+
+def test_campos_reproduzem_escalares_em_es():
+    est = _est()
+    est.resolver()
+    Xt, Yt, toque = est.raster_toque
+    _, _, passo = est.raster_passo
+    # Es = pior caso do campo de passo (toda a area)
+    assert passo.max() == est.Es
+    # Em = pior toque dentro da projecao da malha (bbox dos segmentos)
+    pts = np.vstack([est._A[:, :2], est._B[:, :2]])
+    xmin, ymin = pts.min(axis=0)
+    xmax, ymax = pts.max(axis=0)
+    dentro = (Xt >= xmin) & (Xt <= xmax) & (Yt >= ymin) & (Yt <= ymax)
+    assert np.isclose(toque[dentro].max(), est.Em)
+
+
+def test_dados_corrente_devolve_A_B_I():
+    est = _est()
+    est.resolver()
+    A, B, I = est.dados_corrente()
+    M = est.segs.n
+    assert A.shape == (M, 3) and B.shape == (M, 3)
+    assert I.shape == (M,)
+    # corrente total drenada = corrente injetada Ig
+    assert np.isclose(I.sum(), est.Ig)

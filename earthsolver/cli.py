@@ -125,6 +125,36 @@ def _numerico(args):
         from . import plot
         plot.salvar(plot.plot_malha_3d(estudo.eletrodo), args.plot_malha_3d)
         print(f"Perspectiva da malha exportada para {args.plot_malha_3d}.")
+    r = estudo.resultado
+    if getattr(args, "plot_toque", None):
+        from . import plot
+        plot.salvar(plot.plot_tensao_toque(estudo.raster_toque,
+                    limite=r["E_toque"], eletrodo=estudo.eletrodo),
+                    args.plot_toque)
+        print(f"Mapa de tensao de toque exportado para {args.plot_toque}.")
+    if getattr(args, "plot_passo", None):
+        from . import plot
+        plot.salvar(plot.plot_tensao_passo(estudo.raster_passo,
+                    limite=r["E_passo"], eletrodo=estudo.eletrodo),
+                    args.plot_passo)
+        print(f"Mapa de tensao de passo exportado para {args.plot_passo}.")
+    if getattr(args, "plot_margem", None):
+        from . import plot
+        plot.salvar(plot.plot_margem(estudo.raster_toque, estudo.raster_passo,
+                    r["E_toque"], r["E_passo"], eletrodo=estudo.eletrodo),
+                    args.plot_margem)
+        print(f"Mapa de margem exportado para {args.plot_margem}.")
+    if getattr(args, "plot_perfis", None):
+        from . import plot
+        plot.salvar(plot.plot_perfis(estudo.raster, estudo.raster_toque,
+                    estudo.raster_passo, r["E_toque"], r["E_passo"], r["GPR"]),
+                    args.plot_perfis)
+        print(f"Perfis em corte exportados para {args.plot_perfis}.")
+    if getattr(args, "plot_corrente", None):
+        from . import plot
+        A, B, I = estudo.dados_corrente()
+        plot.salvar(plot.plot_corrente(A, B, I), args.plot_corrente)
+        print(f"Distribuicao de corrente exportada para {args.plot_corrente}.")
     return estudo
 
 
@@ -260,6 +290,16 @@ def main(argv=None):
                      help="PNG da elevacao do potencial em 3D")
     p_n.add_argument("--plot-malha-3d", dest="plot_malha_3d",
                      help="PNG da perspectiva (3D) da malha")
+    p_n.add_argument("--plot-toque", dest="plot_toque",
+                     help="PNG do mapa de tensao de toque")
+    p_n.add_argument("--plot-passo", dest="plot_passo",
+                     help="PNG do mapa de tensao de passo")
+    p_n.add_argument("--plot-margem", dest="plot_margem",
+                     help="PNG do mapa de margem de seguranca (utilizacao %)")
+    p_n.add_argument("--plot-perfis", dest="plot_perfis",
+                     help="PNG dos perfis em corte (potencial/toque/passo)")
+    p_n.add_argument("--plot-corrente", dest="plot_corrente",
+                     help="PNG da distribuicao de corrente por segmento")
     p_n.set_defaults(func=_numerico)
 
     p_d = sub.add_parser("dxf", help="converte um DXF em geometria de eletrodo")
