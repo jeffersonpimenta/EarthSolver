@@ -315,6 +315,58 @@ def plot_corrente(A, B, I, ax=None):
     return ax
 
 
+def plot_campo_3d(raster_campo, rotulo, titulo, eletrodo=None, ax=None):
+    """Superficie 3D de um campo escalar de seguranca (toque ou passo).
+
+    Eleva o campo no eixo z (V) sobre o plano (x, y). Desenha a malha projetada
+    na base se `eletrodo` for dado. Serve tanto raster_toque quanto raster_passo.
+    """
+    X, Y, campo = raster_campo
+    if ax is None:
+        ax = _nova_ax_3d()
+    surf = ax.plot_surface(X, Y, campo, cmap="inferno", linewidth=0,
+                           antialiased=True)
+    ax.figure.colorbar(surf, ax=ax, label=rotulo, shrink=0.6)
+    if eletrodo is not None:
+        zbase = float(np.min(campo))
+        for c in eletrodo.condutores:
+            if _e_haste(c):
+                ax.plot([c.p1[0]], [c.p1[1]], [zbase], marker="v", color="k",
+                        markersize=4, linestyle="")
+            else:
+                ax.plot([c.p1[0], c.p2[0]], [c.p1[1], c.p2[1]], [zbase, zbase],
+                        "-", color="k", linewidth=0.6, alpha=0.6)
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_zlabel(rotulo)
+    ax.set_title(titulo)
+    return ax
+
+
+def plot_convergencia(dados, ax=None):
+    """Curva de convergencia Rg e GPR vs numero de segmentos.
+
+    `dados` = dict com 'n_segmentos', 'Rg' e 'GPR' (saida de
+    numerico.estudo_convergencia). Rg no eixo esquerdo, GPR no direito.
+    """
+    n = np.asarray(dados["n_segmentos"], dtype=float)
+    Rg = np.asarray(dados["Rg"], dtype=float)
+    GPR = np.asarray(dados["GPR"], dtype=float)
+    if ax is None:
+        ax = _nova_ax()
+    l1, = ax.plot(n, Rg, "o-", color="C0", label="Rg (Ohm)")
+    ax.set_xlabel("numero de segmentos")
+    ax.set_ylabel("Resistencia de malha Rg (Ohm)", color="C0")
+    ax.tick_params(axis="y", labelcolor="C0")
+    ax2 = ax.twinx()
+    l2, = ax2.plot(n, GPR, "s--", color="C3", label="GPR (V)")
+    ax2.set_ylabel("GPR (V)", color="C3")
+    ax2.tick_params(axis="y", labelcolor="C3")
+    ax.legend(handles=[l1, l2], loc="best", fontsize="small")
+    ax.set_title("Convergencia da discretizacao")
+    return ax
+
+
 def salvar(obj, caminho):
     """Salva um Axes ou Figure em PNG. Devolve o caminho."""
     from matplotlib.figure import Figure

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from earthsolver.numerico import Eletrodo, EstudoNumerico
+from earthsolver.numerico import Eletrodo, EstudoNumerico, estudo_convergencia
 from earthsolver.solo import ModeloSolo
 
 
@@ -91,3 +91,24 @@ def test_dados_corrente_devolve_A_B_I():
     assert I.shape == (M,)
     # corrente total drenada = corrente injetada Ig
     assert np.isclose(I.sum(), est.Ig)
+
+
+def test_resolver_rg_bate_com_resolver_sem_superficie():
+    est1 = _est()
+    rg = est1.resolver_rg()
+    assert rg > 0
+    assert est1.raster is None                     # nao calcula a superficie
+    est2 = _est()
+    assert np.isclose(rg, est2.resolver()["Rg"])   # mesmo Rg do caminho completo
+
+
+def test_estudo_convergencia_refina_com_segmentos():
+    solo = ModeloSolo([400.0], [])
+    el = Eletrodo.malha_retangular(70.0, 70.0, 7.0, 7.0, 0.5, 0.01)
+    dados = estudo_convergencia(solo, el, Ig=1908.0, t=0.5,
+                                comp_alvos=[14.0, 7.0, 3.5], peso=70)
+    n = dados["n_segmentos"]
+    assert len(n) == len(dados["Rg"]) == len(dados["GPR"]) == 3
+    assert np.all(np.diff(n) > 0)                   # ordenado por nº de segmentos
+    assert np.all(dados["Rg"] > 0)
+    assert np.allclose(dados["GPR"], 1908.0 * dados["Rg"])

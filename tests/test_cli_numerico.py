@@ -70,3 +70,20 @@ def test_cli_numerico_plots_seguranca(tmp_path):
     assert rc == 0
     for png in (toque, passo, margem, perfis, corrente):
         assert png.exists() and png.stat().st_size > 0
+
+
+def test_cli_numerico_plots_3d_e_convergencia(tmp_path):
+    solo = tmp_path / "solo.json"
+    _escrever(solo, {"rho": [400.0], "espessura": []})
+    cond = tmp_path / "cond.json"
+    _escrever(cond, _MALHA)
+    toque3d = tmp_path / "toque3d.png"
+    passo3d = tmp_path / "passo3d.png"
+    conv = tmp_path / "conv.png"
+    rc = main(["numerico", "--eletrodo", str(cond), "--solo", str(solo),
+               "--ig", "1908", "--t", "0.5", "--comp-alvo", "7",
+               "--plot-toque-3d", str(toque3d), "--plot-passo-3d", str(passo3d),
+               "--plot-convergencia", str(conv), "--conv-alvos", "14,7"])
+    assert rc == 0
+    for png in (toque3d, passo3d, conv):
+        assert png.exists() and png.stat().st_size > 0

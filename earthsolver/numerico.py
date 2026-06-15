@@ -299,6 +299,20 @@ class EstudoNumerico:
         return Rrem
 
     # --------------------------------------------------------- solucao
+    def resolver_rg(self) -> float:
+        """Resolve so a resistencia de malha Rg (sem o campo de superficie).
+
+        Monta R (se preciso), resolve o sistema equipotencial e fixa V (GPR) e I.
+        E o caminho rapido usado por resolver() e pela curva de convergencia.
+        """
+        if self.R is None:
+            self.montar_resistencias()
+        y = np.linalg.solve(self.R, np.ones(self.segs.n))
+        Rg = 1.0 / float(y.sum())
+        self.V = self.Ig * Rg
+        self.I = self.V * y
+        return Rg
+
     def resolver(self) -> dict:
         """Resolve o sistema equipotencial e o estudo completo de seguranca.
 
@@ -306,13 +320,7 @@ class EstudoNumerico:
         (Rg, GPR, Em, Es, E_toque, E_passo, *_ok, aprovado) mais extras
         (n_segmentos, V, rho_eq). O raster do potencial fica em self.raster.
         """
-        if self.R is None:
-            self.montar_resistencias()
-        ones = np.ones(self.segs.n)
-        y = np.linalg.solve(self.R, ones)
-        Rg = 1.0 / float(y.sum())
-        self.V = self.Ig * Rg
-        self.I = self.V * y
+        Rg = self.resolver_rg()
 
         self._calcular_superficie()
         E_toque, E_passo, Cs = tensoes_toleraveis(self.rho_eq, self.rho_s,
@@ -460,4 +468,26 @@ class EstudoNumerico:
         with open(arquivo, "w") as f:
             json.dump(dados, f)
         print(f"Raster de potencial exportado para {arquivo}.")
+
+
+def estudo_convergencia(modelo_solo, eletrodo, Ig, t, comp_alvos, **kwargs):
+    """Curva de convergencia: Rg e GPR por numero de segmentos.
+
+    Resolve o eletrodo para cada comprimento-alvo em `comp_alvos` (caminho rapido
+    resolver_rg, sem o campo de superficie) e devolve os resultados ordenados por
+    numero crescente de segmentos. `kwargs` extras vao para EstudoNumerico (peso,
+    rho_s, h_s, n_gauss, ...). Devolve {n_segmentos, Rg, GPR} (arrays).
+    """
+    kwargs.pop("comp_alvo", None)
+    ns, rgs, gprs = [], [], []
+    for ca in comp_alvos:
+        est = EstudoNumerico(modelo_solo, eletrodo, Ig, t, comp_alvo=ca, **kwargs)
+        rg = est.resolver_rg()
+        ns.append(est.segs.n)
+        rgs.append(rg)
+        gprs.append(est.V)
+    ordem = np.argsort(ns)
+    return {"n_segmentos": np.asarray(ns)[ordem],
+            "Rg": np.asarray(rgs)[ordem],
+            "GPR": np.asarray(gprs)[ordem]}
 

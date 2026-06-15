@@ -5,6 +5,8 @@ import numpy as np
 
 from earthsolver.numerico import Condutor, Eletrodo
 from earthsolver.plot import (
+    plot_campo_3d,
+    plot_convergencia,
     plot_corrente,
     plot_malha,
     plot_malha_3d,
@@ -120,5 +122,23 @@ def test_plot_corrente_salva_png(tmp_path):
     png = tmp_path / "corrente.png"
     A, B, I = _segmentos()
     ax = plot_corrente(A, B, I)
+    salvar(ax, png)
+    assert png.exists() and png.stat().st_size > 0
+
+
+def test_plot_campo_3d_salva_png(tmp_path):
+    png = tmp_path / "toque3d.png"
+    ax = plot_campo_3d(_raster_toque(), rotulo="Tensao de toque (V)",
+                       titulo="Toque (3D)", eletrodo=_eletrodo())
+    salvar(ax, png)
+    assert png.exists() and png.stat().st_size > 0
+
+
+def test_plot_convergencia_salva_png(tmp_path):
+    png = tmp_path / "conv.png"
+    dados = {"n_segmentos": np.array([20, 60, 200]),
+             "Rg": np.array([2.9, 2.7, 2.65]),
+             "GPR": np.array([5500.0, 5150.0, 5050.0])}
+    ax = plot_convergencia(dados)
     salvar(ax, png)
     assert png.exists() and png.stat().st_size > 0

@@ -155,6 +155,29 @@ def _numerico(args):
         A, B, I = estudo.dados_corrente()
         plot.salvar(plot.plot_corrente(A, B, I), args.plot_corrente)
         print(f"Distribuicao de corrente exportada para {args.plot_corrente}.")
+    if getattr(args, "plot_toque_3d", None):
+        from . import plot
+        plot.salvar(plot.plot_campo_3d(estudo.raster_toque,
+                    rotulo="Tensao de toque (V)", titulo="Tensao de toque (3D)",
+                    eletrodo=estudo.eletrodo), args.plot_toque_3d)
+        print(f"Superficie 3D de toque exportada para {args.plot_toque_3d}.")
+    if getattr(args, "plot_passo_3d", None):
+        from . import plot
+        plot.salvar(plot.plot_campo_3d(estudo.raster_passo,
+                    rotulo="Tensao de passo (V)", titulo="Tensao de passo (3D)",
+                    eletrodo=estudo.eletrodo), args.plot_passo_3d)
+        print(f"Superficie 3D de passo exportada para {args.plot_passo_3d}.")
+    if getattr(args, "plot_convergencia", None):
+        from . import plot
+        from .numerico import estudo_convergencia
+        if getattr(args, "conv_alvos", None):
+            alvos = [float(v) for v in args.conv_alvos.split(",")]
+        else:
+            alvos = [args.comp_alvo * k for k in (3.0, 2.0, 1.0, 0.6)]
+        dados = estudo_convergencia(solo, eletrodo, args.ig, args.t, alvos,
+                                    peso=args.peso, rho_s=args.rho_s, h_s=args.h_s)
+        plot.salvar(plot.plot_convergencia(dados), args.plot_convergencia)
+        print(f"Curva de convergencia exportada para {args.plot_convergencia}.")
     return estudo
 
 
@@ -300,6 +323,14 @@ def main(argv=None):
                      help="PNG dos perfis em corte (potencial/toque/passo)")
     p_n.add_argument("--plot-corrente", dest="plot_corrente",
                      help="PNG da distribuicao de corrente por segmento")
+    p_n.add_argument("--plot-toque-3d", dest="plot_toque_3d",
+                     help="PNG da superficie 3D da tensao de toque")
+    p_n.add_argument("--plot-passo-3d", dest="plot_passo_3d",
+                     help="PNG da superficie 3D da tensao de passo")
+    p_n.add_argument("--plot-convergencia", dest="plot_convergencia",
+                     help="PNG da curva de convergencia (Rg/GPR vs nº segmentos)")
+    p_n.add_argument("--conv-alvos", dest="conv_alvos",
+                     help="comprimentos-alvo p/ a convergencia (ex.: 14,7,3.5,2)")
     p_n.set_defaults(func=_numerico)
 
     p_d = sub.add_parser("dxf", help="converte um DXF em geometria de eletrodo")
