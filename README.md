@@ -94,6 +94,16 @@ estudo.imprimir_resultado()
 estudo.exportar_raster("potencial.json")               # mapa de potencial p/ plotar
 ```
 
+Progresso e estimativa de conclusão (ETA) do cálculo: passe `progresso=` para
+`resolver()` / `resolver_rg()`. `True`/`"barra"` desenha uma barra no terminal;
+um *callable* recebe um evento por passo (`{"fase", "fracao", "eta", ...}`),
+ideal para uma interface gráfica atualizar a própria barra. No CLI a barra fica
+ligada por padrão no subcomando `numerico` (desligue com `--sem-progresso`).
+
+```python
+estudo.resolver(progresso=lambda ev: print(ev["fracao"], ev["eta"]))
+```
+
 Geometria explícita de condutores (segmentos `p1->p2`, em metros, z = profundidade):
 
 ```python

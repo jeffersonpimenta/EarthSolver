@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .progresso import _NullProgresso, criar_progresso
 from .seguranca import tensoes_toleraveis
 from .solo import ModeloSolo
 
@@ -252,6 +253,29 @@ class EstudoNumerico:
         self.raster_toque = None
         self.raster_passo = None
         self.resultado = None
+        self._prog = _NullProgresso()        # progresso/ETA (no-op por padrao)
+
+    # --------------------------------------------------------- progresso
+    def _pesos_fases(self):
+        """Pesos nominais das fases para a barra de progresso/ETA.
+
+        Razoes aproximadas do custo de cada fase (a precisao nao importa: o ETA
+        se auto-corrige pelo tempo decorrido). 'camadas' so existe em solo N>1.
+        """
+        M = float(self.segs.n)
+        ng = self.n_gauss
+        nc = self.solo.n_camadas
+        xy = self.segs.mid[:, :2]
+        passo = max(self.passo_raster, 1e-9)
+        larg = (float(np.ptp(xy[:, 0])) + 2.0 * self.margem_raster) / passo
+        alt = (float(np.ptp(xy[:, 1])) + 2.0 * self.margem_raster) / passo
+        nraster = max(1.0, larg * alt)
+        return {
+            "matriz": M * M * ng,
+            "camadas": M * M * ng * ng if nc > 1 else 0.0,
+            "solve": M * M,
+            "superficie": nraster * M * 3.0,
+        }
 
     # --------------------------------------------------------- matriz R
     def _bloco_auto(self, M, ng):
@@ -297,6 +321,7 @@ class EstudoNumerico:
         R = np.empty((M, M), dtype=dt)
         self_img = np.empty(M, dtype=dt)
         bs = self._bloco_auto(M, ng)
+        self._prog.fase("matriz")
         for i0 in range(0, M, bs):                       # blocos de pontos de campo
             i1 = min(i0 + bs, M)
             Pb = Pg[i0:i1].reshape((i1 - i0) * ng, 3)
@@ -306,6 +331,7 @@ class EstudoNumerico:
             ph3 = phii.reshape(i1 - i0, ng, M)
             r = np.arange(i1 - i0)
             self_img[i0:i1] = np.einsum("a,ia->i", wg, ph3[r, :, i0 + r])
+            self._prog.passo(i1 / M)
 
         # diagonal: auto-potencial direto (forma fechada) + imagem (quadratura)
         self_dir = self.rho_seg / (2.0 * np.pi * L) * (np.log(2.0 * L / raio) - 1.0)
@@ -351,6 +377,7 @@ class EstudoNumerico:
 
         wgf = np.asarray(wg, dtype=float)
         Rrem = np.zeros((M, M))
+        self._prog.fase("camadas")
         for j in range(M):                               # fonte: segmento j
             sj = slice(j * ng, (j + 1) * ng)
             sx = xy[sj]                                  # (ng, 2)
@@ -360,17 +387,25 @@ class EstudoNumerico:
             pair = di[:, None] * nd + sdi[None, :]       # (M*ng, ng) -> linha em table
             g = evalg(pair, rh).reshape(M, ng, ng)
             Rrem[:, j] = np.einsum("iab,a,b->i", g, wgf, wgf)
+            self._prog.passo((j + 1) / M)
         return Rrem
 
     # --------------------------------------------------------- solucao
-    def resolver_rg(self) -> float:
+    def resolver_rg(self, progresso=None) -> float:
         """Resolve so a resistencia de malha Rg (sem o campo de superficie).
 
         Monta R (se preciso), resolve o sistema equipotencial e fixa V (GPR) e I.
         E o caminho rapido usado por resolver() e pela curva de convergencia.
+        `progresso` (None/callable/'barra'): so cria barra propria quando chamado
+        diretamente; quando vem de resolver() reaproveita o progresso ja ativo.
         """
+        proprio = progresso is not None
+        if proprio:
+            self._prog = criar_progresso(progresso, self._pesos_fases())
+            self._prog.iniciar()
         if self.R is None:
             self.montar_resistencias()
+        self._prog.fase("solve")
         b = np.ones(self.segs.n, dtype=self.R.dtype)
         try:                                  # R e simetrica positiva-definida
             from scipy.linalg import cho_factor, cho_solve
@@ -381,15 +416,23 @@ class EstudoNumerico:
         Rg = 1.0 / float(y.sum())
         self.V = self.Ig * Rg
         self.I = self.V * y
+        self._prog.passo(1.0)
+        if proprio:
+            self._prog.concluir()
+            self._prog = _NullProgresso()
         return Rg
 
-    def resolver(self) -> dict:
+    def resolver(self, progresso=None) -> dict:
         """Resolve o sistema equipotencial e o estudo completo de seguranca.
 
         Devolve um dicionario com chaves compativeis com o metodo IEEE 80
         (Rg, GPR, Em, Es, E_toque, E_passo, *_ok, aprovado) mais extras
         (n_segmentos, V, rho_eq). O raster do potencial fica em self.raster.
+        `progresso`: None (sem barra), callable (recebe eventos, p/ GUI) ou
+        True/'barra' (barra de texto em stderr).
         """
+        self._prog = criar_progresso(progresso, self._pesos_fases())
+        self._prog.iniciar()
         Rg = self.resolver_rg()
 
         self._calcular_superficie()
@@ -410,6 +453,8 @@ class EstudoNumerico:
             "n_segmentos": self.segs.n,
             "rho_eq": self.rho_eq,
         }
+        self._prog.concluir()
+        self._prog = _NullProgresso()
         return self.resultado
 
     # --------------------------------------------------------- potencial de superficie
@@ -492,7 +537,9 @@ class EstudoNumerico:
         ys = np.arange(ymin - margem, ymax + margem + 1e-9, passo)
         X, Y = np.meshgrid(xs, ys)
         base = np.column_stack([X.ravel(), Y.ravel()])
+        self._prog.fase("superficie")
         Phi = self.potencial_superficie(base)
+        self._prog.passo(1.0 / 3.0)
         self.raster = (X, Y, Phi.reshape(X.shape))
 
         # campo de toque: GPR - potencial de superficie (todo o raster).
@@ -508,7 +555,9 @@ class EstudoNumerico:
         # campo de passo: maior diferenca de potencial entre pontos a 1 m
         # (em x e em y), por ponto. Es = pior caso de todo o campo.
         dphi_x = self.potencial_superficie(base + [1.0, 0.0]) - Phi
+        self._prog.passo(2.0 / 3.0)
         dphi_y = self.potencial_superficie(base + [0.0, 1.0]) - Phi
+        self._prog.passo(1.0)
         passo_pt = np.maximum(np.abs(dphi_x), np.abs(dphi_y))
         self.raster_passo = (X, Y, passo_pt.reshape(X.shape))
         self.Es = float(passo_pt.max())
@@ -575,22 +624,30 @@ class EstudoNumerico:
         print(f"Raster de potencial exportado para {arquivo}.")
 
 
-def estudo_convergencia(modelo_solo, eletrodo, Ig, t, comp_alvos, **kwargs):
+def estudo_convergencia(modelo_solo, eletrodo, Ig, t, comp_alvos, progresso=None,
+                        **kwargs):
     """Curva de convergencia: Rg e GPR por numero de segmentos.
 
     Resolve o eletrodo para cada comprimento-alvo em `comp_alvos` (caminho rapido
     resolver_rg, sem o campo de superficie) e devolve os resultados ordenados por
     numero crescente de segmentos. `kwargs` extras vao para EstudoNumerico (peso,
-    rho_s, h_s, n_gauss, ...). Devolve {n_segmentos, Rg, GPR} (arrays).
+    rho_s, h_s, n_gauss, ...). `progresso` (None/callable/'barra') mostra uma barra
+    grossa, um passo por comprimento-alvo. Devolve {n_segmentos, Rg, GPR} (arrays).
     """
     kwargs.pop("comp_alvo", None)
+    alvos = list(comp_alvos)
+    prog = criar_progresso(progresso, {"convergencia": 1.0})
+    prog.iniciar()
+    prog.fase("convergencia")
     ns, rgs, gprs = [], [], []
-    for ca in comp_alvos:
+    for k, ca in enumerate(alvos):
         est = EstudoNumerico(modelo_solo, eletrodo, Ig, t, comp_alvo=ca, **kwargs)
         rg = est.resolver_rg()
         ns.append(est.segs.n)
         rgs.append(rg)
         gprs.append(est.V)
+        prog.passo((k + 1) / max(1, len(alvos)))
+    prog.concluir()
     ordem = np.argsort(ns)
     return {"n_segmentos": np.asarray(ns)[ordem],
             "Rg": np.asarray(rgs)[ordem],

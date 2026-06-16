@@ -102,7 +102,8 @@ def _numerico(args):
     estudo = EstudoNumerico(solo, eletrodo, Ig=args.ig, t=args.t, peso=args.peso,
                             comp_alvo=args.comp_alvo, rho_s=args.rho_s, h_s=args.h_s,
                             precisao=args.precisao, mem_mb=args.mem_mb)
-    estudo.resolver()
+    prog = None if getattr(args, "sem_progresso", False) else "barra"
+    estudo.resolver(progresso=prog)
     estudo.imprimir_resultado()
     if args.exportar:
         estudo.exportar(args.exportar)
@@ -176,6 +177,7 @@ def _numerico(args):
         else:
             alvos = [args.comp_alvo * k for k in (3.0, 2.0, 1.0, 0.6)]
         dados = estudo_convergencia(solo, eletrodo, args.ig, args.t, alvos,
+                                    progresso=prog,
                                     peso=args.peso, rho_s=args.rho_s, h_s=args.h_s,
                                     precisao=args.precisao, mem_mb=args.mem_mb)
         plot.salvar(plot.plot_convergencia(dados), args.plot_convergencia)
@@ -326,7 +328,7 @@ def main(argv=None):
     p_n.add_argument("--plot-passo", dest="plot_passo",
                      help="PNG do mapa de tensao de passo")
     p_n.add_argument("--plot-margem", dest="plot_margem",
-                     help="PNG do mapa de margem de seguranca (utilizacao %)")
+                     help="PNG do mapa de margem de seguranca (utilizacao %%)")
     p_n.add_argument("--plot-perfis", dest="plot_perfis",
                      help="PNG dos perfis em corte (potencial/toque/passo)")
     p_n.add_argument("--plot-corrente", dest="plot_corrente",
@@ -339,6 +341,8 @@ def main(argv=None):
                      help="PNG da curva de convergencia (Rg/GPR vs nº segmentos)")
     p_n.add_argument("--conv-alvos", dest="conv_alvos",
                      help="comprimentos-alvo p/ a convergencia (ex.: 14,7,3.5,2)")
+    p_n.add_argument("--sem-progresso", action="store_true", dest="sem_progresso",
+                     help="desliga a barra de progresso/ETA no terminal")
     p_n.set_defaults(func=_numerico)
 
     p_d = sub.add_parser("dxf", help="converte um DXF em geometria de eletrodo")
